@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//mnt/c/Users/Sarab/AppData/Local/Temp/claude/C--Users-Sarab-OneDrive-Desktop-claude-code-finzen/8ffdbad5-d062-463d-9e56-7cb73abde11e/tasks/**)",
+      "Bash(npm run *)",
+      "Bash(findstr /R \"NEXT_PUBLIC_SUPABASE\" .env.local)",
+      "Bash(findstr \"SUPABASE\")"
+    ]
+  }
+}
