@@ -1,6 +1,7 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { loginAction } from './actions'
 
 const inputStyle = {
   width: '100%', padding: '0.75rem 1rem', borderRadius: '12px',
@@ -27,6 +28,12 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
+  useEffect(() => {
+    const handler = (e: PageTransitionEvent) => { if (e.persisted) setLoading(false) }
+    window.addEventListener('pageshow', handler)
+    return () => window.removeEventListener('pageshow', handler)
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -45,19 +52,12 @@ export default function LoginPage() {
       }
 
       if (tab === 'login') {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) {
-          console.error('[FinZen] signInWithPassword error:', error)
-          setError(translateError(error.message))
+        const result = await loginAction(email, password)
+        if (result?.error) {
+          setError(translateError(result.error))
           setLoading(false)
           return
         }
-        if (!data.session) {
-          setError('Sessão não iniciada. Tente novamente.')
-          setLoading(false)
-          return
-        }
-        // Sessão confirmada — hard redirect para garantir que os cookies sejam enviados
         window.location.href = '/dashboard'
         return
       }
