@@ -2,10 +2,9 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-export async function loginAction(email: string, password: string): Promise<{ error?: string; ok?: boolean }> {
+async function createSupabaseServer() {
   const cookieStore = await cookies()
-
-  const supabase = createServerClient(
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -19,11 +18,34 @@ export async function loginAction(email: string, password: string): Promise<{ er
       },
     }
   )
+}
 
+export async function loginAction(email: string, password: string): Promise<{ error?: string; ok?: boolean }> {
+  const supabase = await createSupabaseServer()
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-
   if (error) return { error: error.message }
   if (!data.session) return { error: 'session_not_created' }
-
   return { ok: true }
+}
+
+export async function signupAction(
+  email: string,
+  password: string,
+  name: string
+): Promise<{ error?: string; ok?: boolean; needsConfirmation?: boolean }> {
+  const supabase = await createSupabaseServer()
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: name } },
+  })
+
+  if (error) return { error: error.message }
+
+  // Email confirmation disabled — session returned immediately
+  if (data.session) return { ok: true }
+
+  // Email confirmation required
+  return { needsConfirmation: true }
 }

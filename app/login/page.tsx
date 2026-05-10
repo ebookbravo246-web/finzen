@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { loginAction } from './actions'
+import { loginAction, signupAction } from './actions'
 
 const inputStyle = {
   width: '100%', padding: '0.75rem 1rem', borderRadius: '12px',
@@ -62,30 +62,18 @@ export default function LoginPage() {
         return
       }
 
-      // signup
-      const { data: signUpData, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: name } },
-      })
-      if (error) {
-        console.error('[FinZen] signUp error:', error)
-        setError(translateError(error.message))
+      // signup — server action seta cookies corretamente
+      const result = await signupAction(email, password, name)
+      if (result.error) {
+        setError(translateError(result.error))
         setLoading(false)
         return
       }
-      // Confirmação de email desativada — sessão retornada imediatamente
-      if (signUpData.session) {
-        const result = await loginAction(email, password)
-        if (result?.error) {
-          setError(translateError(result.error))
-          setLoading(false)
-          return
-        }
+      if (result.ok) {
         window.location.href = '/dashboard'
         return
       }
-      // Confirmação de email ativada — pedir para confirmar
+      // needsConfirmation
       setMessage('Conta criada! Confirme seu e-mail e depois volte aqui para entrar.')
       setTab('login')
       setLoading(false)
