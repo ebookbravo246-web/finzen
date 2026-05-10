@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { askFinancialAI } from '@/lib/claude'
+import { createSupabaseRouteClient } from '@/lib/supabase'
 
 export async function POST(req: NextRequest) {
+  const supabase = createSupabaseRouteClient(req)
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
   try {
     const { message, context } = await req.json()
 

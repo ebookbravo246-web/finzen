@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createSupabaseRouteClient } from '@/lib/supabase'
+
+async function getAuthenticatedUser(req: NextRequest) {
+  const supabase = createSupabaseRouteClient(req)
+  const { data: { user } } = await supabase.auth.getUser()
+  return { supabase, user }
+}
 
 export async function GET(req: NextRequest) {
+  const { supabase, user } = await getAuthenticatedUser(req)
+  if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
   const { searchParams } = new URL(req.url)
-  const month = searchParams.get('month') // formato: 2025-05
+  const month = searchParams.get('month')
   const category = searchParams.get('category')
   const type = searchParams.get('type')
 
   let query = supabase
     .from('transactions')
     .select('*')
+    .eq('user_id', user.id)
     .order('date', { ascending: false })
 
   if (month) {
@@ -27,10 +37,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { supabase, user } = await getAuthenticatedUser(req)
+  if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
   const body = await req.json()
   const { data, error } = await supabase
     .from('transactions')
-    .insert([body])
+    .insert([{ ...body, user_id: user.id }])
     .select()
     .single()
 
@@ -39,11 +52,19 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const { supabase, user } = await getAuthenticatedUser(req)
+  if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'ID obrigatório' }, { status: 400 })
 
-  const { error } = await supabase.from('transactions').delete().eq('id', id)
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id)
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }
