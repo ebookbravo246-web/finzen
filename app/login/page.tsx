@@ -63,7 +63,7 @@ export default function LoginPage() {
       }
 
       // signup
-      const { error } = await supabase.auth.signUp({
+      const { data: signUpData, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { full_name: name } },
@@ -71,10 +71,23 @@ export default function LoginPage() {
       if (error) {
         console.error('[FinZen] signUp error:', error)
         setError(translateError(error.message))
-      } else {
-        setMessage('Conta criada! Confirme seu e-mail e depois volte aqui para entrar.')
-        setTab('login')
+        setLoading(false)
+        return
       }
+      // Confirmação de email desativada — sessão retornada imediatamente
+      if (signUpData.session) {
+        const result = await loginAction(email, password)
+        if (result?.error) {
+          setError(translateError(result.error))
+          setLoading(false)
+          return
+        }
+        window.location.href = '/dashboard'
+        return
+      }
+      // Confirmação de email ativada — pedir para confirmar
+      setMessage('Conta criada! Confirme seu e-mail e depois volte aqui para entrar.')
+      setTab('login')
       setLoading(false)
 
     } catch (err) {
