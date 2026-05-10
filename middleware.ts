@@ -21,22 +21,16 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // getUser() valida o JWT com o servidor Supabase — mais confiável que getSession()
-  const { data: { user }, error } = await supabase.auth.getUser()
-
-  if (error) {
-    console.error('[FinZen] middleware getUser error:', error.message)
-  }
-
+  // Usa getSession para ler o cookie gravado pelo browser client
+  const { data: { session } } = await supabase.auth.getSession()
+  const isLoggedIn = !!session?.user
   const { pathname } = request.nextUrl
 
-  if (pathname.startsWith('/dashboard') && !user) {
-    console.log('[FinZen] middleware: sem sessão, redirecionando para /login')
+  if (pathname.startsWith('/dashboard') && !isLoggedIn) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (pathname === '/login' && user) {
-    console.log('[FinZen] middleware: sessão ativa, redirecionando para /dashboard')
+  if (pathname === '/login' && isLoggedIn) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

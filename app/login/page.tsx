@@ -1,7 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { loginAction, signupAction } from './actions'
 
 const inputStyle = {
   width: '100%', padding: '0.75rem 1rem', borderRadius: '12px',
@@ -12,27 +11,22 @@ const inputStyle = {
 const labelStyle = { fontSize: '0.85rem', color: 'var(--ink-soft)', display: 'block', marginBottom: '6px' }
 
 function translateError(msg: string): string {
-  if (msg.includes('Email not confirmed'))      return 'Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.'
+  if (msg.includes('Email not confirmed'))       return 'Confirme seu e-mail antes de entrar.'
   if (msg.includes('Invalid login credentials')) return 'E-mail ou senha incorretos.'
   if (msg.includes('already registered'))        return 'Este e-mail já está cadastrado. Tente entrar.'
   if (msg.includes('Password should be'))        return 'A senha deve ter pelo menos 6 caracteres.'
+  if (msg.includes('email rate limit'))          return 'Muitas tentativas. Aguarde alguns minutos.'
   return msg
 }
 
 export default function LoginPage() {
-  const [tab, setTab] = useState<'login' | 'signup' | 'forgot'>('login')
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [tab, setTab]         = useState<'login' | 'signup' | 'forgot'>('login')
+  const [name, setName]       = useState('')
+  const [email, setEmail]     = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError]     = useState('')
   const [message, setMessage] = useState('')
-
-  useEffect(() => {
-    const handler = (e: PageTransitionEvent) => { if (e.persisted) setLoading(false) }
-    window.addEventListener('pageshow', handler)
-    return () => window.removeEventListener('pageshow', handler)
-  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,44 +46,45 @@ export default function LoginPage() {
       }
 
       if (tab === 'login') {
-        // loginAction faz redirect('/dashboard') no servidor em caso de sucesso
-        // e retorna { error } em caso de falha
-        const result = await loginAction(email, password)
-        if (result?.error) {
-          setError(translateError(result.error))
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) {
+          console.error('[FinZen] login error:', error.message)
+          setError(translateError(error.message))
           setLoading(false)
+          return
         }
-        // Se não há error, o redirect já aconteceu — não chega aqui
+        window.location.href = '/dashboard'
         return
       }
 
-      // signup — signupAction faz redirect('/dashboard') se sessão for criada
-      const result = await signupAction(email, password, name)
-      if (result?.error) {
-        setError(translateError(result.error))
+      // signup
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: name } },
+      })
+      if (error) {
+        console.error('[FinZen] signup error:', error.message)
+        setError(translateError(error.message))
         setLoading(false)
         return
       }
-      if (result?.needsConfirmation) {
-        setMessage('Conta criada! Confirme seu e-mail e depois volte aqui para entrar.')
-        setTab('login')
-        setLoading(false)
+      if (data.session) {
+        window.location.href = '/dashboard'
         return
       }
-      // redirect já aconteceu no servidor
+      setMessage('Conta criada! Confirme seu e-mail e depois volte aqui para entrar.')
+      setTab('login')
+      setLoading(false)
 
     } catch (err) {
-      console.error('[FinZen] Erro inesperado no login:', err)
+      console.error('[FinZen] erro inesperado:', err)
       setError('Erro de conexão. Verifique sua internet e tente novamente.')
       setLoading(false)
     }
   }
 
-  const switchTab = (t: typeof tab) => {
-    setTab(t)
-    setError('')
-    setMessage('')
-  }
+  const switchTab = (t: typeof tab) => { setTab(t); setError(''); setMessage('') }
 
   return (
     <div style={{
@@ -171,8 +166,7 @@ export default function LoginPage() {
           {tab === 'login' && (
             <button type="button" onClick={() => switchTab('forgot')} style={{
               background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              fontSize: '0.82rem', color: 'var(--green)', textAlign: 'right',
-              fontFamily: 'inherit',
+              fontSize: '0.82rem', color: 'var(--green)', textAlign: 'right', fontFamily: 'inherit',
             }}>
               Esqueci a senha
             </button>
@@ -182,7 +176,7 @@ export default function LoginPage() {
             background: 'var(--green)', color: '#fff', padding: '0.85rem',
             borderRadius: '12px', border: 'none', fontFamily: 'inherit', fontSize: '1rem',
             fontWeight: 500, cursor: loading ? 'wait' : 'pointer', marginTop: '0.5rem',
-            transition: 'background .15s',
+            opacity: loading ? 0.7 : 1, transition: 'opacity .15s',
           }}>
             {loading
               ? 'Aguarde...'
