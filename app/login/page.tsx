@@ -52,31 +52,31 @@ export default function LoginPage() {
       }
 
       if (tab === 'login') {
+        // loginAction faz redirect('/dashboard') no servidor em caso de sucesso
+        // e retorna { error } em caso de falha
         const result = await loginAction(email, password)
         if (result?.error) {
           setError(translateError(result.error))
           setLoading(false)
-          return
         }
-        window.location.href = '/dashboard'
+        // Se não há error, o redirect já aconteceu — não chega aqui
         return
       }
 
-      // signup — server action seta cookies corretamente
+      // signup — signupAction faz redirect('/dashboard') se sessão for criada
       const result = await signupAction(email, password, name)
-      if (result.error) {
+      if (result?.error) {
         setError(translateError(result.error))
         setLoading(false)
         return
       }
-      if (result.ok) {
-        window.location.href = '/dashboard'
+      if (result?.needsConfirmation) {
+        setMessage('Conta criada! Confirme seu e-mail e depois volte aqui para entrar.')
+        setTab('login')
+        setLoading(false)
         return
       }
-      // needsConfirmation
-      setMessage('Conta criada! Confirme seu e-mail e depois volte aqui para entrar.')
-      setTab('login')
-      setLoading(false)
+      // redirect já aconteceu no servidor
 
     } catch (err) {
       console.error('[FinZen] Erro inesperado no login:', err)
