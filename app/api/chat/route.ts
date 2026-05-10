@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { askFinancialAI } from '@/lib/claude'
-import { createSupabaseRouteClient } from '@/lib/supabase'
+import { createSupabaseRouteClient } from '@/lib/supabase-server'
 
 export async function POST(req: NextRequest) {
   const supabase = createSupabaseRouteClient(req)

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseRouteClient } from '@/lib/supabase'
+import { createSupabaseRouteClient } from '@/lib/supabase-server'
 
 async function getAuthenticatedUser(req: NextRequest) {
   const supabase = createSupabaseRouteClient(req)
