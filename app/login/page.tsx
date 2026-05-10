@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [error, setError] = useState('')
 
   async function handleLogin() {
+    alert('clicou! email: ' + email)
     console.log('clicou', email, password)
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
@@ -26,9 +27,10 @@ export default function LoginPage() {
 
   return (
     <div>
+      <p>React está rodando ✓</p>
       <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email" />
       <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="senha" />
-      {error && <p>{error}</p>}
+      {error && <p style={{ color: 'red' }}>{error}</p>}
       <button onClick={handleLogin}>Entrar</button>
     </div>
   )
