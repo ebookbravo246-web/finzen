@@ -21,7 +21,7 @@ export default function LoginPage() {
       setError(error.message)
     } else {
       console.log('sucesso!')
-      window.location.href = '/dashboard'
+      window.location.replace('/dashboard')
     }
   }
 
