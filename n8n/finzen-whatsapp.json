@@ -1,0 +1,160 @@
+{
+  "name": "FinZen WhatsApp Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "evolution-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Webhook Evolution API",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.event}}",
+              "value2": "messages.upsert"
+            },
+            {
+              "value1": "={{$json.body.data.key.fromMe}}",
+              "value2": "false"
+            }
+          ]
+        }
+      },
+      "id": "node-filter",
+      "name": "Filtrar mensagens recebidas",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const remoteJid = $input.first().json.body.data.key.remoteJid || '';\nconst phone = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');\nconst message = $input.first().json.body.data.message?.conversation\n  || $input.first().json.body.data.message?.extendedTextMessage?.text\n  || '';\n\nif (remoteJid.includes('@g.us') || !message.trim()) {\n  return [{ json: { skip: true } }];\n}\n\nreturn [{ json: { phone, message, remoteJid } }];"
+      },
+      "id": "node-extract",
+      "name": "Extrair phone e mensagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.FINZEN_URL}}/api/whatsapp/message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{$env.WHATSAPP_WEBHOOK_SECRET}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{$json.phone}}"
+            },
+            {
+              "name": "message",
+              "value": "={{$json.message}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-finzen-ai",
+      "name": "FinZen AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.EVOLUTION_API_URL}}/message/sendText/={{$env.EVOLUTION_INSTANCE}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.EVOLUTION_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{$('Extrair phone e mensagem').item.json.phone}}"
+            },
+            {
+              "name": "text",
+              "value": "={{$json.reply}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-send",
+      "name": "Enviar resposta via Evolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"ok\":true}",
+        "options": {}
+      },
+      "id": "node-response",
+      "name": "Responder webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 200]
+    }
+  ],
+  "connections": {
+    "Webhook Evolution API": {
+      "main": [[{ "node": "Filtrar mensagens recebidas", "type": "main", "index": 0 }]]
+    },
+    "Filtrar mensagens recebidas": {
+      "main": [
+        [{ "node": "Extrair phone e mensagem", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Extrair phone e mensagem": {
+      "main": [[{ "node": "FinZen AI", "type": "main", "index": 0 }]]
+    },
+    "FinZen AI": {
+      "main": [[{ "node": "Enviar resposta via Evolution", "type": "main", "index": 0 }]]
+    },
+    "Enviar resposta via Evolution": {
+      "main": [[{ "node": "Responder webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["finzen", "whatsapp"]
+}

@@ -43,6 +43,19 @@ export type Account = {
   type: string
   balance: number
   color: string
+  pluggy_account_id?: string | null
+  pluggy_item_id?: string | null
+  created_at: string
+}
+
+export type PluggyItem = {
+  id: string
+  user_id: string
+  item_id: string
+  institution_name: string
+  institution_logo: string | null
+  status: string
+  last_synced_at: string | null
   created_at: string
 }
 

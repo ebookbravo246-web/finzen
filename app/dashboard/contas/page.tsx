@@ -4,8 +4,18 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
+import { PluggyConnect } from '@/components/pluggy/PluggyConnect'
 import { formatCurrency } from '@/lib/utils'
 import { supabase, type Account } from '@/lib/supabase'
+
+type PluggyItem = {
+  id: string
+  item_id: string
+  institution_name: string
+  institution_logo: string | null
+  status: string
+  last_synced_at: string | null
+}
 
 const TYPES = ['Conta Corrente', 'Poupança', 'Cartão de Crédito', 'Investimentos', 'Carteira', 'Outro']
 
@@ -19,7 +29,6 @@ const TYPE_ICON: Record<string, string> = {
 }
 
 const COLORS = ['#0F6E56','#1D9E75','#178BA5','#9B59B6','#E96A00','#820AD1','#E24B4A','#333333']
-
 const EMPTY_FORM = { name: '', type: 'Conta Corrente', balance: '', color: '#0F6E56' }
 
 const inputStyle = {
@@ -30,61 +39,52 @@ const inputStyle = {
 const labelStyle = { fontSize: '0.82rem', color: 'var(--ink-soft)', display: 'block', marginBottom: '5px' }
 
 export default function ContasPage() {
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [editingAcc, setEditingAcc] = useState<Account | null>(null)
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [accounts, setAccounts]       = useState<Account[]>([])
+  const [pluggyItems, setPluggyItems] = useState<PluggyItem[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [syncing, setSyncing]         = useState<string | null>(null)
+  const [showModal, setShowModal]     = useState(false)
+  const [editingAcc, setEditingAcc]   = useState<Account | null>(null)
+  const [form, setForm]               = useState(EMPTY_FORM)
+  const [error, setError]             = useState<string | null>(null)
 
   useEffect(() => {
-    supabase
-      .from('accounts')
-      .select('*')
-      .order('created_at', { ascending: true })
-      .then(({ data }) => {
-        setAccounts(data ?? [])
-        setLoading(false)
-      })
+    Promise.all([
+      supabase.from('accounts').select('*').order('created_at', { ascending: true }),
+      fetch('/api/pluggy/items').then(r => r.json()),
+    ]).then(([{ data: accs }, { items }]) => {
+      setAccounts(accs ?? [])
+      setPluggyItems(items ?? [])
+      setLoading(false)
+    })
   }, [])
 
   const totalBalance = useMemo(() => accounts.reduce((s, a) => s + a.balance, 0), [accounts])
   const totalAssets  = useMemo(() => accounts.filter(a => a.balance >= 0).reduce((s, a) => s + a.balance, 0), [accounts])
   const totalDebt    = useMemo(() => accounts.filter(a => a.balance < 0).reduce((s, a) => s + a.balance, 0), [accounts])
 
-  const openAdd = () => {
-    setEditingAcc(null)
-    setForm(EMPTY_FORM)
-    setShowModal(true)
-  }
+  const manualAccounts = accounts.filter(a => !a.pluggy_item_id)
 
+  const openAdd = () => { setEditingAcc(null); setForm(EMPTY_FORM); setShowModal(true) }
   const openEdit = (acc: Account) => {
     setEditingAcc(acc)
     setForm({ name: acc.name, type: acc.type, balance: String(acc.balance), color: acc.color })
     setShowModal(true)
   }
-
-  const closeModal = () => {
-    setShowModal(false)
-    setEditingAcc(null)
-    setForm(EMPTY_FORM)
-  }
+  const closeModal = () => { setShowModal(false); setEditingAcc(null); setForm(EMPTY_FORM) }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     const fields = { name: form.name, type: form.type, balance: Number(form.balance), color: form.color }
-
     if (editingAcc) {
-      const { data, error } = await supabase
-        .from('accounts').update(fields).eq('id', editingAcc.id).select().single()
+      const { data, error } = await supabase.from('accounts').update(fields).eq('id', editingAcc.id).select().single()
       if (!error && data) setAccounts(prev => prev.map(a => a.id === editingAcc.id ? data : a))
     } else {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data, error } = await supabase
-        .from('accounts').insert({ ...fields, user_id: user.id }).select().single()
+      const { data, error } = await supabase.from('accounts').insert({ ...fields, user_id: user.id }).select().single()
       if (!error && data) setAccounts(prev => [...prev, data])
     }
-
     closeModal()
   }
 
@@ -92,6 +92,48 @@ export default function ContasPage() {
     await supabase.from('accounts').delete().eq('id', id)
     setAccounts(prev => prev.filter(a => a.id !== id))
   }
+
+  const handlePluggySuccess = async (itemId: string) => {
+    // Salva o item no banco
+    const saveRes = await fetch('/api/pluggy/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId }),
+    })
+    if (!saveRes.ok) { setError('Erro ao salvar conexão.'); return }
+    const { item } = await saveRes.json()
+    setPluggyItems(prev => [...prev.filter(i => i.item_id !== itemId), item])
+
+    // Sincroniza contas e transações
+    await handleSync(itemId)
+  }
+
+  const handleSync = async (itemId: string) => {
+    setSyncing(itemId)
+    const res = await fetch('/api/pluggy/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId }),
+    })
+    if (res.ok) {
+      const { data: accs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true })
+      setAccounts(accs ?? [])
+      setPluggyItems(prev => prev.map(i =>
+        i.item_id === itemId ? { ...i, last_synced_at: new Date().toISOString() } : i
+      ))
+    }
+    setSyncing(null)
+  }
+
+  const handleDisconnect = async (itemId: string) => {
+    if (!confirm('Desconectar este banco? As contas e transações importadas serão removidas.')) return
+    await fetch(`/api/pluggy/items?itemId=${itemId}`, { method: 'DELETE' })
+    setPluggyItems(prev => prev.filter(i => i.item_id !== itemId))
+    const { data: accs } = await supabase.from('accounts').select('*').order('created_at', { ascending: true })
+    setAccounts(accs ?? [])
+  }
+
+  const connectedAccounts = (itemId: string) => accounts.filter(a => a.pluggy_item_id === itemId)
 
   return (
     <div>
@@ -105,6 +147,13 @@ export default function ContasPage() {
         </div>
         <Button onClick={openAdd}>+ Nova conta</Button>
       </div>
+
+      {error && (
+        <div style={{ background: '#fff0f0', border: '1px solid var(--danger)', borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.5rem', fontSize: '0.85rem', color: 'var(--danger)' }}>
+          {error}
+          <button onClick={() => setError(null)} style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontWeight: 700 }}>✕</button>
+        </div>
+      )}
 
       {/* TOTAL CARD */}
       <Card style={{ marginBottom: '1.5rem', background: 'var(--green)', border: 'none' }}>
@@ -129,90 +178,184 @@ export default function ContasPage() {
         </div>
       </Card>
 
-      {/* ACCOUNTS LIST */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--ink-soft)' }}>
-          <p style={{ fontSize: '0.9rem' }}>Carregando contas...</p>
-        </div>
-      ) : accounts.length === 0 ? (
-        <Card style={{ marginBottom: '1.5rem' }}>
-          <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--ink-soft)' }}>
-            <p style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🏦</p>
-            <p style={{ fontWeight: 500, marginBottom: '0.3rem' }}>Nenhuma conta cadastrada</p>
-            <p style={{ fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-              Adicione suas contas bancárias, cartões e carteiras para acompanhar seu patrimônio
+      {/* OPEN FINANCE — BANCOS CONECTADOS */}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+          <div>
+            <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Open Finance</h2>
+            <p style={{ fontSize: '0.82rem', color: 'var(--ink-soft)', margin: '2px 0 0' }}>
+              Bancos conectados via Open Finance — sincronização automática
             </p>
-            <Button onClick={openAdd}>+ Adicionar primeira conta</Button>
           </div>
-        </Card>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginBottom: '1.5rem' }}>
-          {accounts.map(acc => (
-            <Card key={acc.id}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div style={{
-                  width: 48, height: 48, borderRadius: '14px', flexShrink: 0,
-                  background: acc.color + '18',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem',
-                }}>
-                  {TYPE_ICON[acc.type] ?? '🏦'}
-                </div>
+          <PluggyConnect
+            onSuccess={handlePluggySuccess}
+            onError={msg => setError(msg)}
+            label="+ Conectar banco"
+          />
+        </div>
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <p style={{ fontSize: '0.95rem', fontWeight: 500, margin: 0 }}>{acc.name}</p>
-                    <Badge color={acc.color} bg={acc.color + '18'}>{acc.type}</Badge>
+        {pluggyItems.length === 0 ? (
+          <div style={{
+            padding: '1.5rem', borderRadius: '14px',
+            background: 'var(--green-pale)', border: '1px dashed rgba(29,158,117,0.4)',
+            textAlign: 'center',
+          }}>
+            <p style={{ fontSize: '1.5rem', marginBottom: '0.4rem' }}>🔗</p>
+            <p style={{ fontSize: '0.88rem', fontWeight: 500, color: 'var(--green)', margin: 0 }}>
+              Nenhum banco conectado ainda
+            </p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--ink-soft)', margin: '4px 0 0' }}>
+              Clique em "Conectar banco" para importar transações automaticamente
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            {pluggyItems.map(item => {
+              const accs = connectedAccounts(item.item_id)
+              const totalItemBalance = accs.reduce((s, a) => s + a.balance, 0)
+              const isSyncing = syncing === item.item_id
+              return (
+                <Card key={item.id}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+                    <div style={{
+                      width: 44, height: 44, borderRadius: '12px', flexShrink: 0,
+                      background: 'var(--green-pale)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {item.institution_logo
+                        ? <img src={item.institution_logo} alt={item.institution_name} style={{ width: 28, height: 28, objectFit: 'contain' }} />
+                        : <span style={{ fontSize: '1.3rem' }}>🏦</span>
+                      }
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                        <p style={{ fontWeight: 600, fontSize: '0.95rem', margin: 0 }}>{item.institution_name}</p>
+                        <Badge color="var(--green)" bg="var(--green-pale)">Open Finance</Badge>
+                        <span style={{
+                          fontSize: '0.7rem', padding: '0.1rem 0.5rem', borderRadius: 100,
+                          background: item.status === 'UPDATED' ? '#e6f9f0' : '#fff3e0',
+                          color: item.status === 'UPDATED' ? '#0F6E56' : '#e96a00',
+                          fontWeight: 600,
+                        }}>
+                          {item.status === 'UPDATED' ? '● Atualizado' : '⚠ Pendente'}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', margin: 0 }}>
+                        {accs.length} conta{accs.length !== 1 ? 's' : ''} · Total: {formatCurrency(totalItemBalance)}
+                        {item.last_synced_at && (
+                          <> · Sync: {new Date(item.last_synced_at).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</>
+                        )}
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleSync(item.item_id)}
+                        disabled={isSyncing}
+                        style={{ fontSize: '0.8rem', padding: '0.35rem 0.8rem' }}
+                      >
+                        {isSyncing ? '...' : '↻ Sync'}
+                      </Button>
+                      <PluggyConnect
+                        onSuccess={handlePluggySuccess}
+                        onError={msg => setError(msg)}
+                        itemId={item.item_id}
+                        label="Reconectar"
+                        disabled={isSyncing}
+                      />
+                      <button
+                        onClick={() => handleDisconnect(item.item_id)}
+                        title="Desconectar"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)', fontSize: '0.95rem', padding: '0.3rem 0.4rem', borderRadius: '6px' }}
+                      >
+                        🗑
+                      </button>
+                    </div>
                   </div>
-                  <p style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', margin: '2px 0 0' }}>
-                    Adicionada em {new Date(acc.created_at + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </p>
-                </div>
 
-                <p className="font-display" style={{
-                  fontSize: '1.1rem', fontWeight: 700, margin: 0, flexShrink: 0,
-                  color: acc.balance < 0 ? 'var(--danger)' : 'var(--ink)',
-                }}>
-                  {formatCurrency(acc.balance)}
-                </p>
-
-                <div style={{ display: 'flex', gap: '0.3rem', flexShrink: 0 }}>
-                  <button onClick={() => openEdit(acc)} title="Editar" style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'var(--ink-soft)', fontSize: '0.95rem', padding: '0.3rem 0.4rem', borderRadius: '6px',
-                  }}>✏️</button>
-                  <button onClick={() => handleDelete(acc.id)} title="Excluir" style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'var(--ink-soft)', fontSize: '0.95rem', padding: '0.3rem 0.4rem', borderRadius: '6px',
-                  }}>🗑</button>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* OPEN FINANCE — Em breve */}
-      <div style={{
-        padding: '1.2rem 1.4rem', borderRadius: '14px',
-        background: 'var(--green-pale)', border: '1px solid rgba(29,158,117,0.2)',
-        display: 'flex', alignItems: 'flex-start', gap: '1rem',
-      }}>
-        <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>🔗</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.3rem' }}>
-            <p style={{ fontWeight: 600, fontSize: '0.9rem', margin: 0, color: 'var(--green)' }}>
-              Open Finance — Conexão automática com bancos
-            </p>
-            <span style={{
-              fontSize: '0.68rem', fontWeight: 700, padding: '0.15rem 0.55rem',
-              borderRadius: '100px', background: 'var(--green)', color: '#fff', letterSpacing: '0.5px',
-            }}>EM BREVE</span>
+                  {accs.length > 0 && (
+                    <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {accs.map(acc => (
+                        <div key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'var(--surface)', borderRadius: 8, padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}>
+                          <span>{TYPE_ICON[acc.type] ?? '🏦'}</span>
+                          <span style={{ color: 'var(--ink-soft)' }}>{acc.name}</span>
+                          <span style={{ fontWeight: 600, color: acc.balance < 0 ? 'var(--danger)' : 'var(--ink)' }}>
+                            {formatCurrency(acc.balance)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              )
+            })}
           </div>
-          <p style={{ fontSize: '0.82rem', color: 'var(--ink-soft)', margin: 0, lineHeight: 1.6 }}>
-            Em breve você poderá conectar seus bancos via Open Finance (regulamentado pelo Banco Central)
-            e suas transações serão importadas automaticamente. Suas credenciais nunca são armazenadas.
-          </p>
+        )}
+      </div>
+
+      {/* CONTAS MANUAIS */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+          <div>
+            <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Contas manuais</h2>
+            <p style={{ fontSize: '0.82rem', color: 'var(--ink-soft)', margin: '2px 0 0' }}>
+              Cadastradas manualmente sem conexão bancária
+            </p>
+          </div>
         </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--ink-soft)' }}>
+            <p style={{ fontSize: '0.9rem' }}>Carregando...</p>
+          </div>
+        ) : manualAccounts.length === 0 ? (
+          <Card>
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--ink-soft)' }}>
+              <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>👛</p>
+              <p style={{ fontWeight: 500, marginBottom: '0.3rem' }}>Nenhuma conta manual</p>
+              <p style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
+                Carteiras, cofrinhos, dinheiro em espécie — adicione aqui.
+              </p>
+              <Button onClick={openAdd}>+ Adicionar conta</Button>
+            </div>
+          </Card>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            {manualAccounts.map(acc => (
+              <Card key={acc.id}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{
+                    width: 48, height: 48, borderRadius: '14px', flexShrink: 0,
+                    background: acc.color + '18',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem',
+                  }}>
+                    {TYPE_ICON[acc.type] ?? '🏦'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <p style={{ fontSize: '0.95rem', fontWeight: 500, margin: 0 }}>{acc.name}</p>
+                      <Badge color={acc.color} bg={acc.color + '18'}>{acc.type}</Badge>
+                    </div>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', margin: '2px 0 0' }}>
+                      Adicionada em {new Date(acc.created_at + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </p>
+                  </div>
+                  <p className="font-display" style={{
+                    fontSize: '1.1rem', fontWeight: 700, margin: 0, flexShrink: 0,
+                    color: acc.balance < 0 ? 'var(--danger)' : 'var(--ink)',
+                  }}>
+                    {formatCurrency(acc.balance)}
+                  </p>
+                  <div style={{ display: 'flex', gap: '0.3rem', flexShrink: 0 }}>
+                    <button onClick={() => openEdit(acc)} title="Editar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)', fontSize: '0.95rem', padding: '0.3rem 0.4rem', borderRadius: '6px' }}>✏️</button>
+                    <button onClick={() => handleDelete(acc.id)} title="Excluir" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)', fontSize: '0.95rem', padding: '0.3rem 0.4rem', borderRadius: '6px' }}>🗑</button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* MODAL */}

@@ -1,8 +1,11 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { supabase } from '@/lib/supabase'
+import { PLANS, type Plan } from '@/lib/stripe'
+import type { Subscription } from '@/lib/subscription'
 
 const inputStyle = {
   width: '100%', padding: '0.7rem 1rem', borderRadius: '10px',
@@ -40,6 +43,7 @@ function Feedback({ type, msg }: { type: 'success' | 'error'; msg: string }) {
 }
 
 export default function ConfiguracoesPage() {
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [initials, setInitials] = useState('?')
@@ -56,6 +60,15 @@ export default function ConfiguracoesPage() {
     weeklyReport: true, budgetAlerts: true, goalAlerts: true, whatsapp: false,
   })
 
+  const [subscription, setSubscription] = useState<Subscription | null>(null)
+  const [planLoading, setPlanLoading] = useState(false)
+  const [planMsg, setPlanMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const [whatsappPhone, setWhatsappPhone] = useState('')
+  const [whatsappSaved, setWhatsappSaved] = useState<string | null>(null)
+  const [whatsappLoading, setWhatsappLoading] = useState(false)
+  const [whatsappMsg, setWhatsappMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
@@ -68,7 +81,21 @@ export default function ConfiguracoesPage() {
         : (parts[0]?.[0]?.toUpperCase() ?? user.email?.[0]?.toUpperCase() ?? '?')
       )
     })
-  }, [])
+
+    fetch('/api/stripe/subscription')
+      .then(r => r.json())
+      .then(({ subscription }) => setSubscription(subscription))
+
+    fetch('/api/whatsapp/connect')
+      .then(r => r.json())
+      .then(({ phone }) => { if (phone) { setWhatsappSaved(phone); setWhatsappPhone(phone) } })
+
+    if (searchParams.get('success') === 'true') {
+      setPlanMsg({ type: 'success', text: 'Assinatura ativada com sucesso! Bem-vindo ao plano Pro.' })
+    } else if (searchParams.get('canceled') === 'true') {
+      setPlanMsg({ type: 'error', text: 'Pagamento cancelado. Você continua no plano Free.' })
+    }
+  }, [searchParams])
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -127,6 +154,52 @@ export default function ConfiguracoesPage() {
       setTimeout(() => setPwdMsg(null), 3000)
     }
     setPwdLoading(false)
+  }
+
+  const handleUpgrade = async (plan: Plan) => {
+    setPlanLoading(true)
+    const res = await fetch('/api/stripe/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan }),
+    })
+    const { url, error } = await res.json()
+    if (error) { setPlanMsg({ type: 'error', text: error }); setPlanLoading(false); return }
+    window.location.href = url
+  }
+
+  const handleManagePlan = async () => {
+    setPlanLoading(true)
+    const res = await fetch('/api/stripe/portal', { method: 'POST' })
+    const { url, error } = await res.json()
+    if (error) { setPlanMsg({ type: 'error', text: error }); setPlanLoading(false); return }
+    window.location.href = url
+  }
+
+  const handleSaveWhatsapp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setWhatsappLoading(true)
+    setWhatsappMsg(null)
+    const res = await fetch('/api/whatsapp/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: whatsappPhone }),
+    })
+    const data = await res.json()
+    if (data.error) {
+      setWhatsappMsg({ type: 'error', text: data.error })
+    } else {
+      setWhatsappSaved(data.phone)
+      setWhatsappMsg({ type: 'success', text: 'Número vinculado! Agora envie uma mensagem para o bot.' })
+    }
+    setWhatsappLoading(false)
+  }
+
+  const handleDisconnectWhatsapp = async () => {
+    await fetch('/api/whatsapp/connect', { method: 'DELETE' })
+    setWhatsappSaved(null)
+    setWhatsappPhone('')
+    setWhatsappMsg({ type: 'success', text: 'Número desvinculado.' })
   }
 
   const handleDeleteAccount = async () => {
@@ -210,6 +283,60 @@ export default function ConfiguracoesPage() {
             </form>
           </Card>
 
+          {/* WHATSAPP */}
+          <Card>
+            <CardHeader title="WhatsApp" />
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.75rem', background: 'var(--green-pale)', borderRadius: 12, marginBottom: '1rem', border: '1px solid rgba(29,158,117,0.2)' }}>
+              <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>💬</span>
+              <div>
+                <p style={{ fontSize: '0.85rem', fontWeight: 500, margin: '0 0 2px', color: 'var(--green)' }}>
+                  Assistente financeiro via WhatsApp
+                </p>
+                <p style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', margin: 0, lineHeight: 1.5 }}>
+                  Vincule seu número e pergunte sobre seus gastos, metas e investimentos direto pelo WhatsApp.
+                </p>
+              </div>
+            </div>
+
+            {whatsappSaved ? (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.7rem 0.9rem', background: 'var(--surface)', borderRadius: 10, marginBottom: '0.75rem' }}>
+                  <span style={{ color: 'var(--green-light)', fontWeight: 700 }}>✓</span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: '0.85rem', fontWeight: 500, margin: 0 }}>+{whatsappSaved}</p>
+                    <p style={{ fontSize: '0.76rem', color: 'var(--ink-soft)', margin: 0 }}>Número vinculado</p>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', background: 'var(--green)', color: '#fff', padding: '0.15rem 0.5rem', borderRadius: 100 }}>Ativo</span>
+                </div>
+                {whatsappMsg && <div style={{ marginBottom: '0.75rem' }}><Feedback type={whatsappMsg.type} msg={whatsappMsg.text} /></div>}
+                <Button variant="outline" size="sm" style={{ width: '100%' }} onClick={handleDisconnectWhatsapp}>
+                  Desvincular número
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveWhatsapp} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div>
+                  <label style={labelStyle}>Seu número com DDD e país</label>
+                  <input
+                    required
+                    type="tel"
+                    value={whatsappPhone}
+                    onChange={e => setWhatsappPhone(e.target.value)}
+                    placeholder="5511999999999"
+                    style={inputStyle}
+                  />
+                  <p style={{ fontSize: '0.76rem', color: 'var(--ink-soft)', marginTop: 4 }}>
+                    Formato: 55 + DDD + número (sem espaços ou traços)
+                  </p>
+                </div>
+                {whatsappMsg && <Feedback type={whatsappMsg.type} msg={whatsappMsg.text} />}
+                <Button type="submit" disabled={whatsappLoading}>
+                  {whatsappLoading ? 'Vinculando...' : '💬 Vincular WhatsApp'}
+                </Button>
+              </form>
+            )}
+          </Card>
+
           {/* NOTIFICAÇÕES */}
           <Card>
             <CardHeader title="Notificações" />
@@ -240,37 +367,91 @@ export default function ConfiguracoesPage() {
           {/* PLANO */}
           <Card>
             <CardHeader title="Seu plano" />
-            <div style={{
-              background: 'var(--green-pale)', borderRadius: '12px', padding: '1.2rem',
-              border: '1px solid rgba(29,158,117,0.2)', marginBottom: '1.2rem',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span className="font-display" style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--green)' }}>Plano Free</span>
-                <span style={{ fontSize: '0.75rem', background: 'var(--green)', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '100px' }}>Ativo</span>
+            {planMsg && (
+              <div style={{ marginBottom: '1rem' }}>
+                <Feedback type={planMsg.type} msg={planMsg.text} />
               </div>
-              <p className="font-display" style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--ink)', letterSpacing: '-1px' }}>
-                R$ 0<span style={{ fontSize: '0.85rem', fontWeight: 400, color: 'var(--ink-soft)' }}>/mês</span>
-              </p>
-              <p style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', marginTop: '4px' }}>Grátis para sempre</p>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.2rem' }}>
-              {[
-                { label: 'Transações ilimitadas', active: true },
-                { label: 'Metas e orçamentos',    active: true },
-                { label: 'IA financeira',          active: true },
-                { label: 'Open Finance (bancos)',  active: false },
-                { label: 'WhatsApp ilimitado',     active: false },
-                { label: 'Relatórios PDF',         active: false },
-              ].map(f => (
-                <div key={f.label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
-                  <span style={{ color: f.active ? 'var(--green-light)' : '#D1D5DB', fontWeight: 700 }}>
-                    {f.active ? '✓' : '○'}
-                  </span>
-                  <span style={{ color: f.active ? 'var(--ink)' : 'var(--ink-soft)' }}>{f.label}</span>
-                </div>
-              ))}
-            </div>
-            <Button style={{ width: '100%' }}>Fazer upgrade → Pro</Button>
+            )}
+            {(() => {
+              const plan = (subscription?.plan ?? 'free') as Plan
+              const cfg  = PLANS[plan]
+              const isPaid = plan !== 'free'
+              const isCanceling = subscription?.cancel_at_period_end
+              const periodEnd = subscription?.current_period_end
+                ? new Date(subscription.current_period_end).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+                : null
+
+              return (
+                <>
+                  <div style={{
+                    background: 'var(--green-pale)', borderRadius: '12px', padding: '1.2rem',
+                    border: '1px solid rgba(29,158,117,0.2)', marginBottom: '1.2rem',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span className="font-display" style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--green)' }}>
+                        Plano {cfg.name}
+                      </span>
+                      <span style={{
+                        fontSize: '0.75rem',
+                        background: isCanceling ? 'var(--danger)' : 'var(--green)',
+                        color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '100px',
+                      }}>
+                        {isCanceling ? 'Cancelando' : subscription?.status === 'trialing' ? 'Trial' : 'Ativo'}
+                      </span>
+                    </div>
+                    <p className="font-display" style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--ink)', letterSpacing: '-1px' }}>
+                      {cfg.price === 0 ? 'R$ 0' : `R$ ${cfg.price}`}
+                      <span style={{ fontSize: '0.85rem', fontWeight: 400, color: 'var(--ink-soft)' }}>/mês</span>
+                    </p>
+                    {isCanceling && periodEnd && (
+                      <p style={{ fontSize: '0.78rem', color: 'var(--danger)', marginTop: '4px' }}>
+                        Acesso até {periodEnd}
+                      </p>
+                    )}
+                    {subscription?.status === 'trialing' && periodEnd && (
+                      <p style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', marginTop: '4px' }}>
+                        Trial gratuito até {periodEnd}
+                      </p>
+                    )}
+                    {!isCanceling && isPaid && periodEnd && subscription?.status !== 'trialing' && (
+                      <p style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', marginTop: '4px' }}>
+                        Próxima cobrança: {periodEnd}
+                      </p>
+                    )}
+                    {!isPaid && (
+                      <p style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', marginTop: '4px' }}>Grátis para sempre</p>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.2rem' }}>
+                    {cfg.features.map(f => (
+                      <div key={f} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                        <span style={{ color: 'var(--green-light)', fontWeight: 700 }}>✓</span>
+                        <span>{f}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {isPaid ? (
+                    <Button variant="outline" style={{ width: '100%' }} onClick={handleManagePlan} disabled={planLoading}>
+                      {planLoading ? 'Aguarde...' : 'Gerenciar assinatura'}
+                    </Button>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <Button style={{ width: '100%' }} onClick={() => handleUpgrade('pro')} disabled={planLoading}>
+                        {planLoading ? 'Aguarde...' : 'Upgrade para Pro — R$ 39/mês'}
+                      </Button>
+                      <Button variant="outline" style={{ width: '100%' }} onClick={() => handleUpgrade('familia')} disabled={planLoading}>
+                        {planLoading ? '' : 'Plano Família — R$ 69/mês'}
+                      </Button>
+                      <p style={{ fontSize: '0.74rem', color: 'var(--ink-soft)', textAlign: 'center' }}>
+                        14 dias grátis · Cancele quando quiser
+                      </p>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </Card>
 
           {/* DADOS E PRIVACIDADE */}
