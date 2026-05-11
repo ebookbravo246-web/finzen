@@ -4,7 +4,11 @@
       "Read(//mnt/c/Users/Sarab/AppData/Local/Temp/claude/C--Users-Sarab-OneDrive-Desktop-claude-code-finzen/8ffdbad5-d062-463d-9e56-7cb73abde11e/tasks/**)",
       "Bash(npm run *)",
       "Bash(findstr /R \"NEXT_PUBLIC_SUPABASE\" .env.local)",
-      "Bash(findstr \"SUPABASE\")"
+      "Bash(findstr \"SUPABASE\")",
+      "Bash(node -e ' *)",
+      "PowerShell(Start-Process \"https://finzen.com.br/login\")",
+      "PowerShell(Start-Process \"https://finzen-l0xxioy0r-ebookbravo246-4504s-projects.vercel.app/login\")",
+      "Bash(node *)"
     ]
   }
 }

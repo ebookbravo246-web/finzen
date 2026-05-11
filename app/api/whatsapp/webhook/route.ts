@@ -3,12 +3,11 @@ import { processWhatsAppMessage } from '@/lib/whatsapp-ai'
 import { sendTextMessage, sendTyping, parsePhone } from '@/lib/evolution'
 import { NextRequest, NextResponse } from 'next/server'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
-
 export async function POST(request: NextRequest) {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
   // Valida o webhook secret na query string
   const secret = request.nextUrl.searchParams.get('secret')
   if (secret !== process.env.WHATSAPP_WEBHOOK_SECRET) {

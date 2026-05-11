@@ -2,7 +2,7 @@ import { createSupabaseRouteClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
-const supabaseAdmin = createClient(
+const getAdmin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data } = await supabaseAdmin
+  const { data } = await getAdmin()
     .from('whatsapp_numbers')
     .select('phone')
     .eq('user_id', user.id)
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Número de telefone inválido' }, { status: 400 })
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await getAdmin()
     .from('whatsapp_numbers')
     .upsert({ user_id: user.id, phone: normalized }, { onConflict: 'user_id' })
 
@@ -51,6 +51,6 @@ export async function DELETE(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  await supabaseAdmin.from('whatsapp_numbers').delete().eq('user_id', user.id)
+  await getAdmin().from('whatsapp_numbers').delete().eq('user_id', user.id)
   return NextResponse.json({ ok: true })
 }

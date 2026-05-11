@@ -1,10 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Plan } from './stripe'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+function getAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+}
 
 export type Subscription = {
   plan: Plan
@@ -16,7 +18,7 @@ export type Subscription = {
 }
 
 export async function getUserSubscription(userId: string): Promise<Subscription> {
-  const { data } = await supabaseAdmin
+  const { data } = await getAdmin()
     .from('subscriptions')
     .select('plan, status, current_period_end, cancel_at_period_end, stripe_customer_id, stripe_subscription_id')
     .eq('user_id', userId)
@@ -36,7 +38,7 @@ export async function upsertSubscription(
   userId: string,
   fields: Partial<Subscription> & { stripe_customer_id?: string },
 ) {
-  await supabaseAdmin
+  await getAdmin()
     .from('subscriptions')
     .upsert({ user_id: userId, ...fields, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
 }

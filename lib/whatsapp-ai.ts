@@ -1,12 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+function getAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+}
 
 type Message = { role: 'user' | 'assistant'; content: string }
 
@@ -15,9 +17,9 @@ async function getFinancialContext(userId: string) {
   const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   const [{ data: txs }, { data: goals }, { data: budgets }] = await Promise.all([
-    supabaseAdmin.from('transactions').select('amount,type,category').eq('user_id', userId).gte('date', `${monthStr}-01`),
-    supabaseAdmin.from('goals').select('name,current,target').eq('user_id', userId),
-    supabaseAdmin.from('budgets').select('category,limit_amount,spent').eq('user_id', userId).eq('month', monthStr),
+    getAdmin().from('transactions').select('amount,type,category').eq('user_id', userId).gte('date', `${monthStr}-01`),
+    getAdmin().from('goals').select('name,current,target').eq('user_id', userId),
+    getAdmin().from('budgets').select('category,limit_amount,spent').eq('user_id', userId).eq('month', monthStr),
   ])
 
   const income   = (txs ?? []).filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
@@ -36,7 +38,7 @@ async function getFinancialContext(userId: string) {
 }
 
 async function loadHistory(userId: string): Promise<Message[]> {
-  const { data } = await supabaseAdmin
+  const { data } = await getAdmin()
     .from('whatsapp_messages')
     .select('role, content')
     .eq('user_id', userId)
@@ -47,7 +49,7 @@ async function loadHistory(userId: string): Promise<Message[]> {
 }
 
 async function saveMessages(userId: string, userMsg: string, assistantMsg: string) {
-  await supabaseAdmin.from('whatsapp_messages').insert([
+  await getAdmin().from('whatsapp_messages').insert([
     { user_id: userId, role: 'user',      content: userMsg },
     { user_id: userId, role: 'assistant', content: assistantMsg },
   ])
