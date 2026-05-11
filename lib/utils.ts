@@ -18,28 +18,34 @@ export function getMonthYear(date = new Date()): string {
 
 export function categoryColor(category: string): string {
   const colors: Record<string, string> = {
-    Moradia:      '#0F6E56',
-    Alimentação:  '#E24B4A',
-    Transporte:   '#BA7517',
-    Lazer:        '#178BA5',
-    Saúde:        '#9B59B6',
-    Educação:     '#2980B9',
-    Receita:      '#1D9E75',
-    Outros:       '#888780',
+    Moradia:             '#0F6E56',
+    Alimentação:         '#E24B4A',
+    Transporte:          '#BA7517',
+    Lazer:               '#178BA5',
+    Saúde:               '#9B59B6',
+    Educação:            '#2980B9',
+    Salário:             '#1D9E75',
+    Freelance:           '#27AE60',
+    'Aluguel recebido':  '#16A085',
+    Investimentos:       '#8E44AD',
+    Outros:              '#888780',
   }
   return colors[category] ?? '#888780'
 }
 
 export function categoryIcon(category: string): string {
   const icons: Record<string, string> = {
-    Moradia:     '🏠',
-    Alimentação: '🍔',
-    Transporte:  '🚗',
-    Lazer:       '🎬',
-    Saúde:       '🏥',
-    Educação:    '📚',
-    Receita:     '💼',
-    Outros:      '📦',
+    Moradia:             '🏠',
+    Alimentação:         '🍔',
+    Transporte:          '🚗',
+    Lazer:               '🎬',
+    Saúde:               '🏥',
+    Educação:            '📚',
+    Salário:             '💼',
+    Freelance:           '💻',
+    'Aluguel recebido':  '🏡',
+    Investimentos:       '📈',
+    Outros:              '📦',
   }
   return icons[category] ?? '📦'
 }
