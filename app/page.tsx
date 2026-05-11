@@ -58,9 +58,11 @@ export default function Home() {
           Fin<span style={{ color: 'var(--ink)' }}>Zen</span>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <a href="#features" style={{ color: 'var(--ink-soft)', textDecoration: 'none', fontSize: '0.9rem' }}>Funcionalidades</a>
-          <a href="#como" style={{ color: 'var(--ink-soft)', textDecoration: 'none', fontSize: '0.9rem' }}>Como funciona</a>
-          <a href="#precos" style={{ color: 'var(--ink-soft)', textDecoration: 'none', fontSize: '0.9rem' }}>Preços</a>
+          <div className="lp-nav-links">
+            <a href="#features" style={{ color: 'var(--ink-soft)', textDecoration: 'none', fontSize: '0.9rem' }}>Funcionalidades</a>
+            <a href="#como" style={{ color: 'var(--ink-soft)', textDecoration: 'none', fontSize: '0.9rem' }}>Como funciona</a>
+            <a href="#precos" style={{ color: 'var(--ink-soft)', textDecoration: 'none', fontSize: '0.9rem' }}>Preços</a>
+          </div>
           <Link href="/login" style={{
             background: 'var(--green)', color: '#fff', padding: '0.55rem 1.3rem',
             borderRadius: '100px', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 500,
@@ -96,7 +98,7 @@ export default function Home() {
           Controle gastos, investimentos e metas financeiras com inteligência artificial —
           direto pelo WhatsApp ou na web, sem planilhas.
         </p>
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <div className="lp-hero-btns">
           <Link href="/login" style={{
             background: 'var(--green)', color: '#fff', padding: '0.85rem 2rem',
             borderRadius: '100px', textDecoration: 'none', fontWeight: 500, fontSize: '1rem',
@@ -117,11 +119,7 @@ export default function Home() {
       </section>
 
       {/* SOCIAL PROOF */}
-      <div style={{
-        padding: '2rem 5%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        gap: '3rem', flexWrap: 'wrap', borderTop: '1px solid var(--border)',
-        borderBottom: '1px solid var(--border)', background: 'var(--surface)',
-      }}>
+      <div className="lp-social-proof">
         {[
           { n: '1.500+', l: 'usuários ativos' },
           { n: 'R$ 4,2M', l: 'em gastos monitorados' },
@@ -136,7 +134,7 @@ export default function Home() {
       </div>
 
       {/* FEATURES */}
-      <section id="features" style={{ padding: '6rem 5%' }}>
+      <section id="features" className="lp-pad">
         <p style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '0.8rem' }}>
           Funcionalidades
         </p>
@@ -165,7 +163,7 @@ export default function Home() {
       </section>
 
       {/* HOW IT WORKS */}
-      <section id="como" style={{ padding: '6rem 5%', background: 'var(--surface)' }}>
+      <section id="como" className="lp-pad-surf">
         <p style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '2px', textAlign: 'center' }}>Como funciona</p>
         <h2 className="font-display" style={{ fontSize: 'clamp(1.8rem,4vw,3rem)', fontWeight: 700, letterSpacing: '-1px', textAlign: 'center', margin: '0.8rem auto 3.5rem' }}>
           Três passos para o controle total
@@ -186,7 +184,7 @@ export default function Home() {
       </section>
 
       {/* PRICING */}
-      <section id="precos" style={{ padding: '6rem 5%', textAlign: 'center', background: 'var(--surface)' }}>
+      <section id="precos" className="lp-pad-surf" style={{ textAlign: 'center' }}>
         <p style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '2px' }}>Planos</p>
         <h2 className="font-display" style={{ fontSize: 'clamp(1.8rem,4vw,3rem)', fontWeight: 700, letterSpacing: '-1px', margin: '0.8rem 0 0.5rem' }}>
           Simples, sem surpresas
@@ -237,10 +235,7 @@ export default function Home() {
       </section>
 
       {/* FOOTER */}
-      <footer style={{
-        padding: '3rem 5%', borderTop: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem',
-      }}>
+      <footer className="lp-footer">
         <div className="font-display" style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--green)' }}>FinZen</div>
         <p style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>© 2025 FinZen · Todos os direitos reservados</p>
         <div style={{ display: 'flex', gap: '1.5rem' }}>

@@ -31,3 +31,37 @@ body { font-family: 'DM Sans', sans-serif; background: var(--surface); color: va
   .bg-surface     { background: var(--surface); }
   .border-custom  { border-color: var(--border); }
 }
+
+/* ── Landing page — responsive layout ── */
+.lp-nav-links {
+  display: flex; gap: 1rem; align-items: center;
+}
+.lp-hero-btns {
+  display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
+}
+.lp-social-proof {
+  padding: 2rem 5%;
+  display: flex; align-items: center; justify-content: center;
+  gap: 3rem; flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.lp-pad      { padding: 6rem 5%; }
+.lp-pad-surf { padding: 6rem 5%; background: var(--surface); }
+.lp-footer {
+  padding: 3rem 5%;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .lp-nav-links    { display: none; }
+  .lp-hero-btns    { flex-direction: column; align-items: stretch; }
+  .lp-hero-btns a  { text-align: center; }
+  .lp-social-proof { gap: 1.5rem 2rem; padding: 1.5rem 5%; }
+  .lp-pad          { padding: 3.5rem 5%; }
+  .lp-pad-surf     { padding: 3.5rem 5%; }
+  .lp-footer       { justify-content: center; text-align: center; }
+}
