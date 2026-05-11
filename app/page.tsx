@@ -21,7 +21,7 @@ const plans = [
   },
   {
     name: 'Pro',
-    price: 'R$ 39',
+    price: 'R$ 9,90',
     desc: 'Para quem quer controle total e insights avançados',
     features: ['Bancos ilimitados', 'Dashboard completo + IA', 'Histórico ilimitado', 'WhatsApp ilimitado', 'Controle de investimentos', 'Metas e orçamentos', 'Relatórios exportáveis'],
     cta: 'Começar período grátis',
@@ -29,7 +29,7 @@ const plans = [
   },
   {
     name: 'Família',
-    price: 'R$ 69',
+    price: 'R$ 19,90',
     desc: 'Até 4 pessoas com finanças unificadas ou separadas',
     features: ['Tudo do plano Pro', 'Até 4 usuários', 'Visão consolidada da família', 'Despesas compartilhadas', 'Prioridade no suporte'],
     cta: 'Assinar família',

@@ -13,13 +13,13 @@ export const PLANS = {
   },
   pro: {
     name: 'Pro',
-    price: 39,
+    price: 9.90,
     priceId: process.env.STRIPE_PRO_PRICE_ID!,
     features: ['Tudo do Free', 'Open Finance ilimitado', 'IA financeira ilimitada', 'WhatsApp ilimitado', 'Relatórios PDF', 'Histórico ilimitado'],
   },
   familia: {
     name: 'Família',
-    price: 69,
+    price: 19.90,
     priceId: process.env.STRIPE_FAMILIA_PRICE_ID!,
     features: ['Tudo do Pro', 'Até 4 usuários', 'Visão consolidada', 'Despesas compartilhadas', 'Suporte prioritário'],
   },
