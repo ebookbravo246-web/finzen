@@ -23,6 +23,9 @@ export default function OrcamentosPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState({ category: 'Alimentação', limit: '' })
+  const [saveError, setSaveError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
 
   const now = new Date()
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -87,46 +90,56 @@ export default function OrcamentosPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSaveError('')
+    setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) { setSaveError('Sessão expirada. Faça login novamente.'); setSaving(false); return }
 
     if (editingId) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('budgets')
         .update({ limit_amount: Number(form.limit) })
         .eq('id', editingId)
         .select()
         .single()
+      if (error) { setSaveError(error.message); setSaving(false); return }
       if (data) setBudgets(prev => prev.map(b => b.id === editingId ? data : b))
     } else {
       const existing = budgets.find(b => b.category === form.category)
       if (existing) {
-        // Update limit if budget for this category already exists this month
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('budgets')
           .update({ limit_amount: Number(form.limit) })
           .eq('id', existing.id)
           .select()
           .single()
+        if (error) { setSaveError(error.message); setSaving(false); return }
         if (data) setBudgets(prev => prev.map(b => b.id === existing.id ? data : b))
       } else {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('budgets')
           .insert({ category: form.category, limit_amount: Number(form.limit), month: currentMonth, spent: 0, user_id: user.id })
           .select()
           .single()
+        if (error) { setSaveError(error.message); setSaving(false); return }
         if (data) setBudgets(prev => [...prev, data])
       }
     }
 
+    setSaving(false)
     setShowModal(false)
     setForm({ category: 'Alimentação', limit: '' })
     setEditingId(null)
+    setSaveError('')
   }
 
-  const handleDelete = async (id: string) => {
-    await supabase.from('budgets').delete().eq('id', id)
-    setBudgets(prev => prev.filter(b => b.id !== id))
+  const confirmDelete = (id: string) => setDeleteId(id)
+
+  const handleDelete = async () => {
+    if (!deleteId) return
+    await supabase.from('budgets').delete().eq('id', deleteId)
+    setBudgets(prev => prev.filter(b => b.id !== deleteId))
+    setDeleteId(null)
   }
 
   return (
@@ -240,7 +253,7 @@ export default function OrcamentosPage() {
                       background: 'none', border: 'none', cursor: 'pointer',
                       color: 'var(--ink-soft)', fontSize: '0.9rem', padding: '0.2rem',
                     }}>✏️</button>
-                    <button onClick={() => handleDelete(b.id)} style={{
+                    <button onClick={() => confirmDelete(b.id)} style={{
                       background: 'none', border: 'none', cursor: 'pointer',
                       color: 'var(--ink-soft)', fontSize: '0.9rem', padding: '0.2rem',
                     }}>🗑</button>
@@ -323,13 +336,31 @@ export default function OrcamentosPage() {
               Você já gastou {formatCurrency(spentByCategory[form.category])} em {form.category} este mês.
             </p>
           )}
+          {saveError && (
+            <p style={{ color: 'var(--danger)', fontSize: '0.82rem', background: '#fef2f2', padding: '0.6rem 0.9rem', borderRadius: '8px' }}>
+              {saveError}
+            </p>
+          )}
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <Button type="button" variant="outline" style={{ flex: 1 }} onClick={() => setShowModal(false)}>
               Cancelar
             </Button>
-            <Button type="submit" style={{ flex: 1 }}>Salvar</Button>
+            <Button type="submit" style={{ flex: 1 }} disabled={saving}>
+              {saving ? 'Salvando...' : 'Salvar'}
+            </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* CONFIRM DELETE */}
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Excluir orçamento?">
+        <p style={{ color: 'var(--ink-soft)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+          Esta ação não pode ser desfeita.
+        </p>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <Button variant="outline" style={{ flex: 1 }} onClick={() => setDeleteId(null)}>Cancelar</Button>
+          <Button variant="danger" style={{ flex: 1 }} onClick={handleDelete}>Excluir</Button>
+        </div>
       </Modal>
     </div>
   )
