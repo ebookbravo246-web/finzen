@@ -33,6 +33,9 @@ export default function OrcamentosPage() {
 
   useEffect(() => {
     async function load() {
+      const [y, mo] = currentMonth.split('-')
+      const lastDay = new Date(Number(y), Number(mo), 0).getDate()
+
       const [{ data: budgetsData }, { data: txData }] = await Promise.all([
         supabase
           .from('budgets')
@@ -42,7 +45,8 @@ export default function OrcamentosPage() {
         supabase
           .from('transactions')
           .select('category, amount, type')
-          .like('date', `${currentMonth}%`)
+          .gte('date', `${currentMonth}-01`)
+          .lte('date', `${currentMonth}-${String(lastDay).padStart(2, '0')}`)
           .eq('type', 'expense'),
       ])
 
