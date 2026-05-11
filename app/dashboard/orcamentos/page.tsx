@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -18,7 +18,6 @@ const labelStyle = { fontSize: '0.82rem', color: 'var(--ink-soft)', display: 'bl
 
 export default function OrcamentosPage() {
   const [budgets, setBudgets] = useState<Budget[]>([])
-  const [spentByCategory, setSpentByCategory] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -32,53 +31,20 @@ export default function OrcamentosPage() {
   const monthLabel = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 
   useEffect(() => {
-    async function load() {
-      const [y, mo] = currentMonth.split('-')
-      const lastDay = new Date(Number(y), Number(mo), 0).getDate()
-
-      const [{ data: budgetsData }, { data: txData }] = await Promise.all([
-        supabase
-          .from('budgets')
-          .select('*')
-          .eq('month', currentMonth)
-          .order('created_at'),
-        supabase
-          .from('transactions')
-          .select('category, amount, type')
-          .gte('date', `${currentMonth}-01`)
-          .lte('date', `${currentMonth}-${String(lastDay).padStart(2, '0')}`)
-          .eq('type', 'expense'),
-      ])
-
-      // Compute spent per category from real transactions
-      const spent: Record<string, number> = {}
-      txData?.forEach(tx => {
-        spent[tx.category] = (spent[tx.category] || 0) + Math.abs(tx.amount)
+    supabase
+      .from('budgets')
+      .select('*')
+      .eq('month', currentMonth)
+      .order('created_at')
+      .then(({ data }) => {
+        setBudgets(data ?? [])
+        setLoading(false)
       })
-
-      setBudgets(budgetsData ?? [])
-      setSpentByCategory(spent)
-      setLoading(false)
-    }
-    load()
   }, [currentMonth])
 
-  const enriched = useMemo(() =>
-    budgets.map(b => ({ ...b, spent: spentByCategory[b.category] || 0 })),
-    [budgets, spentByCategory]
-  )
-
-  const totalLimit = enriched.reduce((s, b) => s + b.limit_amount, 0)
-  const totalSpent = enriched.reduce((s, b) => s + b.spent, 0)
+  const totalLimit = budgets.reduce((s, b) => s + b.limit_amount, 0)
+  const totalSpent = budgets.reduce((s, b) => s + (b.spent ?? 0), 0)
   const totalPct   = totalLimit > 0 ? Math.min(Math.round((totalSpent / totalLimit) * 100), 100) : 0
-
-  // Also show categories with spending but no budget set
-  const unbudgeted = useMemo(() => {
-    const budgetedCats = new Set(budgets.map(b => b.category))
-    return Object.entries(spentByCategory)
-      .filter(([cat]) => !budgetedCats.has(cat) && cat !== 'Receita')
-      .sort((a, b) => b[1] - a[1])
-  }, [budgets, spentByCategory])
 
   const openAdd = () => {
     setEditingId(null)
@@ -202,7 +168,7 @@ export default function OrcamentosPage() {
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--ink-soft)' }}>
           <p>Carregando orçamentos...</p>
         </div>
-      ) : enriched.length === 0 && unbudgeted.length === 0 ? (
+      ) : budgets.length === 0 ? (
         <Card>
           <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--ink-soft)' }}>
             <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📊</p>
@@ -212,9 +178,9 @@ export default function OrcamentosPage() {
         </Card>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {enriched.map(b => {
-            const pct  = b.limit_amount > 0 ? Math.min(Math.round((b.spent / b.limit_amount) * 100), 100) : 0
-            const over = b.spent > b.limit_amount
+          {budgets.map(b => {
+            const pct  = b.limit_amount > 0 ? Math.min(Math.round(((b.spent ?? 0) / b.limit_amount) * 100), 100) : 0
+            const over = (b.spent ?? 0) > b.limit_amount
             const warn = pct >= 80 && !over
             const barColor = over ? 'var(--danger)' : warn ? WARN_COLOR : 'var(--green-light)'
             const labelColor = over ? 'var(--danger)' : warn ? WARN_COLOR : 'var(--green)'
@@ -236,7 +202,7 @@ export default function OrcamentosPage() {
                         {over && <span style={{ fontSize: '0.75rem', color: 'var(--danger)', fontWeight: 600 }}>⚠ Excedido</span>}
                         {warn && <span style={{ fontSize: '0.75rem', color: WARN_COLOR, fontWeight: 600 }}>⚡ Atenção</span>}
                         <span style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>
-                          {formatCurrency(b.spent)} / {formatCurrency(b.limit_amount)}
+                          {formatCurrency(b.spent ?? 0)} / {formatCurrency(b.limit_amount)}
                         </span>
                       </div>
                     </div>
@@ -247,8 +213,8 @@ export default function OrcamentosPage() {
                       <span style={{ fontSize: '0.76rem', color: labelColor, fontWeight: 600 }}>{pct}% usado</span>
                       <span style={{ fontSize: '0.76rem', color: 'var(--ink-soft)' }}>
                         {over
-                          ? `${formatCurrency(b.spent - b.limit_amount)} acima do limite`
-                          : `${formatCurrency(b.limit_amount - b.spent)} disponível`}
+                          ? `${formatCurrency((b.spent ?? 0) - b.limit_amount)} acima do limite`
+                          : `${formatCurrency(b.limit_amount - (b.spent ?? 0))} disponível`}
                       </span>
                     </div>
                   </div>
@@ -267,45 +233,6 @@ export default function OrcamentosPage() {
             )
           })}
 
-          {/* Categories with spending but no budget */}
-          {unbudgeted.length > 0 && (
-            <div style={{ marginTop: '0.5rem' }}>
-              <p style={{ fontSize: '0.82rem', color: 'var(--ink-soft)', marginBottom: '0.75rem', fontWeight: 500 }}>
-                Categorias sem orçamento definido
-              </p>
-              {unbudgeted.map(([cat, spent]) => (
-                <Card key={cat} style={{ marginBottom: '0.75rem', opacity: 0.8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{
-                      width: 44, height: 44, borderRadius: '12px', flexShrink: 0,
-                      background: `${categoryColor(cat)}15`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem',
-                    }}>
-                      {categoryIcon(cat)}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 500, fontSize: '0.95rem' }}>{cat}</span>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>{formatCurrency(spent)}</span>
-                      </div>
-                      <p style={{ fontSize: '0.76rem', color: 'var(--ink-soft)', margin: '3px 0 0' }}>Sem limite definido</p>
-                    </div>
-                    <button onClick={() => {
-                      setForm({ category: cat, limit: '' })
-                      setEditingId(null)
-                      setShowModal(true)
-                    }} style={{
-                      background: 'none', border: '1px solid var(--border)', cursor: 'pointer',
-                      color: 'var(--green)', fontSize: '0.78rem', padding: '0.3rem 0.7rem',
-                      borderRadius: '8px', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                    }}>
-                      Definir limite
-                    </button>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
@@ -335,11 +262,6 @@ export default function OrcamentosPage() {
               placeholder="1.000" style={inputStyle} autoFocus
             />
           </div>
-          {!editingId && spentByCategory[form.category] > 0 && (
-            <p style={{ fontSize: '0.82rem', color: 'var(--ink-soft)', background: 'var(--surface)', padding: '0.6rem 0.8rem', borderRadius: '8px' }}>
-              Você já gastou {formatCurrency(spentByCategory[form.category])} em {form.category} este mês.
-            </p>
-          )}
           {saveError && (
             <p style={{ color: 'var(--danger)', fontSize: '0.82rem', background: '#fef2f2', padding: '0.6rem 0.9rem', borderRadius: '8px' }}>
               {saveError}

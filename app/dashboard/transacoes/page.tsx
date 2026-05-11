@@ -10,6 +10,22 @@ import { supabase, type Transaction } from '@/lib/supabase'
 const EXPENSE_CATEGORIES = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros']
 const INCOME_CATEGORIES  = ['Salário', 'Freelance', 'Aluguel recebido', 'Investimentos', 'Outros']
 
+// Atualiza o campo spent do orçamento para a categoria+mês; delta positivo soma, negativo subtrai
+async function syncBudgetSpent(category: string, month: string, delta: number) {
+  const { data: budget } = await supabase
+    .from('budgets')
+    .select('id, spent')
+    .eq('category', category)
+    .eq('month', month)
+    .maybeSingle()
+  if (budget) {
+    await supabase
+      .from('budgets')
+      .update({ spent: Math.max(0, (budget.spent ?? 0) + delta) })
+      .eq('id', budget.id)
+  }
+}
+
 function currentMonthStr() {
   return new Date().toISOString().slice(0, 7)
 }
@@ -135,6 +151,13 @@ export default function TransacoesPage() {
         .single()
       if (error) { setSaveError(error.message); setSaving(false); return }
       if (data) setTransactions(prev => prev.map(t => t.id === editingTx.id ? data : t))
+      // Reverte orçamento anterior e aplica o novo
+      if (editingTx.type === 'expense') {
+        await syncBudgetSpent(editingTx.category, editingTx.date.slice(0, 7), -Math.abs(editingTx.amount))
+      }
+      if (form.type === 'expense') {
+        await syncBudgetSpent(form.category, form.date.slice(0, 7), Math.abs(amount))
+      }
     } else {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setSaveError('Sessão expirada. Faça login novamente.'); setSaving(false); return }
@@ -145,6 +168,10 @@ export default function TransacoesPage() {
         .single()
       if (error) { setSaveError(error.message); setSaving(false); return }
       if (data) setTransactions(prev => [data, ...prev])
+      // Soma ao orçamento da categoria
+      if (form.type === 'expense') {
+        await syncBudgetSpent(form.category, form.date.slice(0, 7), Math.abs(amount))
+      }
     }
 
     setSaving(false)
@@ -155,9 +182,14 @@ export default function TransacoesPage() {
 
   const handleDelete = async () => {
     if (!deleteId) return
+    const tx = transactions.find(t => t.id === deleteId)
     await supabase.from('transactions').delete().eq('id', deleteId)
     setTransactions(prev => prev.filter(t => t.id !== deleteId))
     setDeleteId(null)
+    // Subtrai do orçamento se era um gasto
+    if (tx?.type === 'expense') {
+      await syncBudgetSpent(tx.category, tx.date.slice(0, 7), -Math.abs(tx.amount))
+    }
   }
 
   return (
